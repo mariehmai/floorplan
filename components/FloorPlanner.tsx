@@ -1,35 +1,102 @@
-import * as React from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import ReactFlow, {
-  MiniMap,
+  ReactFlowProvider,
+  useNodesState,
   Controls,
-  type Node,
-  type Edge,
-  Background,
   BackgroundVariant,
+  Background,
+  MiniMap,
+  type Node,
+  type ReactFlowInstance,
 } from 'react-flow-renderer';
+import { DeskNode, SeatNode } from './FloorNodes';
+import { Sidebar } from './Sidebar';
 
-type FloorPlannerProps = {
-  nodes: Node[];
-  edges: Edge[];
+const initialNodes = [
+  {
+    id: '2',
+    type: 'deskNode',
+    data: { onChange: () => {} },
+    position: { x: 300, y: 50 },
+  },
+];
+
+const nodeTypes = {
+  deskNode: DeskNode,
+  seatNode: SeatNode,
 };
 
-function Flow({ nodes, edges }: FloorPlannerProps) {
+let id = 0;
+const getId = () => `dndnode_${id++}`;
+
+export function Flow() {
+  const reactFlowWrapper = useRef<HTMLInputElement>(null);
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [reactFlowInstance, setReactFlowInstance] =
+    useState<ReactFlowInstance | null>(null);
+
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+
+      if (!reactFlowWrapper.current || !reactFlowInstance) return;
+
+      const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
+      const type = event.dataTransfer.getData('application/reactflow');
+
+      // check if the dropped element is valid
+      if (typeof type === 'undefined' || !type) {
+        return;
+      }
+
+      const position = reactFlowInstance.project({
+        x: event.clientX - reactFlowBounds.left,
+        y: event.clientY - reactFlowBounds.top,
+      });
+      const newNode = {
+        id: getId(),
+        type,
+        position,
+        data: { label: `${type} node` },
+      } as Node;
+
+      setNodes((nds) => nds.concat(newNode));
+    },
+    [setNodes, reactFlowInstance]
+  );
+
   return (
-    <ReactFlow defaultNodes={nodes} defaultEdges={edges} snapToGrid>
-      <Background variant={BackgroundVariant.Dots} gap={12} />
-      <MiniMap />
-      <Controls />
-    </ReactFlow>
+    <ReactFlowProvider>
+      <Sidebar />
+      <div className="h-full w-full" ref={reactFlowWrapper}>
+        <ReactFlow
+          nodes={nodes}
+          nodeTypes={nodeTypes}
+          onNodesChange={onNodesChange}
+          onInit={setReactFlowInstance}
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+          fitView
+          snapToGrid
+        >
+          <Background variant={BackgroundVariant.Dots} gap={12} />
+          <MiniMap />
+          <Controls />
+        </ReactFlow>
+      </div>
+    </ReactFlowProvider>
   );
 }
 
 export function FloorPlanner() {
-  const [nodes, _setNodes] = React.useState([]);
-  const [edges, _setEdges] = React.useState([]);
-
   return (
     <div className="h-[100vh] w-full">
-      <Flow nodes={nodes} edges={edges} />
+      <Flow />
     </div>
   );
 }
